@@ -379,11 +379,9 @@ function initCanvas(canvasElement) {
                     this.controlsToRemove = []
                     let controls = this.dispatchEventToControls({ type: e.type, point: { x: e.offsetX, y: e.offsetY }, which: e.which, handled: false })
                     if (this.controlsToAdd.length > 0) {
-                        console.log("adding", this.controlsToAdd)
                         controls = [...controls, ...this.controlsToAdd]
                     }
                     if (this.controlsToRemove.length > 0) {
-                        console.log("removing", this.controlsToRemove)
                         controls = controls.filter(c => this.controlsToRemove.indexOf(c) < 0)
                     }
                     return controls
