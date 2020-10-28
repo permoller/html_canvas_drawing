@@ -40,7 +40,7 @@ function initCanvas(canvasElement) {
     /**
      * @callback HandleEvent
      * @param {ICanvasEvent} e
-     * @returns {boolean} true if redraw is needed
+     * @returns {Control}
      */
 
     /**
@@ -87,7 +87,7 @@ function initCanvas(canvasElement) {
         }
 
         /** @type HandleEvent */
-        handleEvent = e => false
+        handleEvent = _ => this
 
         /** @type Draw */
         draw = () => { }
@@ -162,33 +162,43 @@ function initCanvas(canvasElement) {
          * @param {CanvasRenderingContext2D} ctx
          * @param {IRect} rect
          */
-        constructor(ctx, rect) {
+        constructor(ctx, rect, mousedown) {
             super(ctx);
             this.rect = new Rect(ctx, rect);
+            this.mousedown = mousedown
         }
 
         /** @type HandleEvent */
         handleEvent = e => {
-            let redrawNeeded = false;
             if (e.type === "mousedown" && !e.handled && e.which === 1 && rectContainsPoint(this.rect, e.point)) {
                 e.handled = true
-                this.mousedown = { rectPoint: { x: this.rect.x, y: this.rect.y }, mousePoint: e.point }
-                redrawNeeded = true
+                return new Box(this.ctx, this.rect, {
+                    rectPoint: { x: this.rect.x, y: this.rect.y },
+                    mousePoint: e.point
+                })
             } else if (e.type === "mousedowncancel" && e.which === 1 && this.mousedown) {
-                this.rect.x = this.mousedown.rectPoint.x
-                this.rect.y = this.mousedown.rectPoint.y
-                redrawNeeded = true
+                return new Box(this.ctx, {
+                    x: this.mousedown.rectPoint.x,
+                    y: this.mousedown.rectPoint.y,
+                    w: this.rect.w,
+                    h: this.rect.h
+                }, this.mousedown)
             } else if (e.type === "mousemove" && this.mousedown) {
-                this.rect.x = this.mousedown.rectPoint.x + (e.point.x - this.mousedown.mousePoint.x)
-                this.rect.y = this.mousedown.rectPoint.y + (e.point.y - this.mousedown.mousePoint.y)
-                redrawNeeded = true
+                return new Box(this.ctx, {
+                    x: this.mousedown.rectPoint.x + (e.point.x - this.mousedown.mousePoint.x),
+                    y: this.mousedown.rectPoint.y + (e.point.y - this.mousedown.mousePoint.y),
+                    w: this.rect.w,
+                    h: this.rect.h
+                }, this.mousedown)
             } else if (e.type === "mouseup" && e.which === 1 && this.mousedown) {
-                this.rect.x = this.mousedown.rectPoint.x + (e.point.x - this.mousedown.mousePoint.x)
-                this.rect.y = this.mousedown.rectPoint.y + (e.point.y - this.mousedown.mousePoint.y)
-                this.mousedown = undefined
-                redrawNeeded = true
+                return new Box(this.ctx, {
+                    x: this.mousedown.rectPoint.x + (e.point.x - this.mousedown.mousePoint.x),
+                    y: this.mousedown.rectPoint.y + (e.point.y - this.mousedown.mousePoint.y),
+                    w: this.rect.w,
+                    h: this.rect.h
+                }, undefined)
             }
-            return redrawNeeded
+            return this
         }
 
         /** @type Draw */
@@ -219,9 +229,8 @@ function initCanvas(canvasElement) {
         handleEvent = e => {
             if (e.type === "mouseup" && e.which === 1 && rectContainsPoint(this.rect, e.point)) {
                 this.onClick()
-                return true
             }
-            return false
+            return this
         }
 
         /** @type Draw */
@@ -262,13 +271,15 @@ function initCanvas(canvasElement) {
 
         /** @type HandleEvent */
         handleEvent = e => {
-            let redrawNeeded = false;
-            this.items.reverse().forEach(item => redrawNeeded |= item.handleEvent(e))
+            const newItems = [this.items.length]
+            const itemsChanged = this.items.reduceRight((changed, item, index) => ((newItems[index] = item.handleEvent(e)) != item) || changed, false)
             if (e.type === "mouseup" || e.type === "mousedowncancel") {
                 this.onDismiss()
-                redrawNeeded = true
             }
-            return redrawNeeded
+            if (itemsChanged) {
+                return new Contextmenu(this.ctx, this.x, this.y, this.onDismiss, newItems)
+            }
+            return this
         }
 
         /** @type Draw */
@@ -292,10 +303,16 @@ function initCanvas(canvasElement) {
 
             /** @type {Control[]} */
             this.controls = []
+            /** @type {Control[]} */
+            this.controlsToAdd = []
+            /** @type {Control[]} */
+            this.controlsToRemove = []
 
             const handleEvent = e => {
-                if (this.handleEvent(e)) {
-                    console.log("redraw")
+                const oldControls = this.controls;
+                const newControls = this.handleEvent(e)
+                if (oldControls != newControls) {
+                    this.controls = newControls
                     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height)
                     this.controls.forEach(c => c.draw())
                 }
@@ -307,14 +324,13 @@ function initCanvas(canvasElement) {
             document.addEventListener("contextmenu", handleEvent)
         }
 
-        addControl = control => this.controls = [...this.controls, control]
-        removeControl = control => this.controls = this.controls.filter(c => c !== control)
+
 
         /**
          * @param {MouseEvent | KeyboardEvent} e
          */
         handleEvent = e => {
-            let redrawNeeded = false;
+
 
             if (e.target === this.canvasElement) {
                 let ignoreEvent = false
@@ -331,39 +347,63 @@ function initCanvas(canvasElement) {
                     this.mousedown[e.which] = false
                 }
 
-                if (!ignoreEvent) {
 
-                    redrawNeeded |= this.dispatchEventToControls({ type: e.type, point: { x: e.offsetX, y: e.offsetY }, which: e.which, handled: false })
-                    if (e.type === "contextmenu") {
-                        e.preventDefault()
+                if (e.type === "contextmenu") {
+                    e.preventDefault()
 
-                        const contextMenu = new Contextmenu(this.ctx, e.offsetX, e.offsetY, () => this.removeControl(contextMenu), [
+                    const contextMenu = new Contextmenu(
+                        this.ctx,
+                        e.offsetX,
+                        e.offsetY,
+                        () => {
+                            this.controlsToRemove.push(contextMenu)
+                        },
+                        [
                             {
                                 text: "box",
-                                onClick: () => this.addControl(new Box(this.ctx, { x: e.offsetX, y: e.offsetY, w: 150, h: 150 }))
+                                onClick: () => {
+                                    console.log("onClick")
+                                    this.controlsToAdd.push(new Box(this.ctx, { x: e.offsetX, y: e.offsetY, w: 150, h: 150 }))
+                                }
                             },
                             { text: "test 2", onClick: () => alert("test 2") },
                             { text: "test 3", onClick: () => alert("test 3") }
                         ]
 
-                        )
-                        this.addControl(contextMenu)
-                        redrawNeeded |= true
-                    }
+                    )
+                    return [...this.controls, contextMenu]
+                }
 
+                if (!ignoreEvent) {
+                    this.controlsToAdd = []
+                    this.controlsToRemove = []
+                    let controls = this.dispatchEventToControls({ type: e.type, point: { x: e.offsetX, y: e.offsetY }, which: e.which, handled: false })
+                    if (this.controlsToAdd.length > 0) {
+                        console.log("adding", this.controlsToAdd)
+                        controls = [...controls, ...this.controlsToAdd]
+                    }
+                    if (this.controlsToRemove.length > 0) {
+                        console.log("removing", this.controlsToRemove)
+                        controls = controls.filter(c => this.controlsToRemove.indexOf(c) < 0)
+                    }
+                    return controls
                 }
             } else {
                 // if the user press a mouse-button inside the canvas but releases it outside the canvas we tell the components to cancel what they are doing due to the mousedown event
                 if (e.type === "mouseup" && this.mousedown[e.which]) {
                     this.mousedown[e.which] = false
-                    redrawNeeded |= this.dispatchEventToControls({ type: "mousedowncancel", which: e.which })
+                    return this.dispatchEventToControls({ type: "mousedowncancel", which: e.which })
                 }
             }
 
-            return redrawNeeded
+            return this.controls
         }
 
-        dispatchEventToControls = (event) => this.controls.reduceRight((needsRedraw, control) => control.handleEvent(event) || needsRedraw, false)
+        dispatchEventToControls = (event) => {
+            const newControls = [this.controls.length]
+            const controlsChanged = this.controls.reduceRight((changed, control, index) => ((newControls[index] = control.handleEvent(event)) != control) || changed, false)
+            return controlsChanged ? newControls : this.controls
+        }
 
     }
 
