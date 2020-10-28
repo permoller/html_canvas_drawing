@@ -146,7 +146,7 @@ function initCanvas(canvasElement) {
             this.ctx.fillText(this.text, this.x, this.y)
         }
 
-        /** @type {MeasureRect} */
+        /** @type MeasureRect */
         measureRect = () => {
             const size = this.ctx.measureText(this.text)
             return { x: this.x, y: this.y, w: size.width, h: parseInt(this.ctx.font) }
