@@ -78,14 +78,16 @@ function initCanvas(canvasElement) {
     }
 
 
-
-    class CanvasItem {
+    class Control {
         /**
          * @param {CanvasRenderingContext2D} ctx
          */
         constructor(ctx) {
             this.ctx = ctx
         }
+
+        /** @type HandleEvent */
+        handleEvent = e => false
 
         /** @type Draw */
         draw = () => { }
@@ -94,7 +96,7 @@ function initCanvas(canvasElement) {
         measureRect = () => ({ x: 0, y: 0, h: 0, w: 0 })
     }
 
-    class Rect extends CanvasItem {
+    class Rect extends Control {
         /**
          * @param {CanvasRenderingContext2D} ctx
          * @param {IRect} rect
@@ -120,7 +122,7 @@ function initCanvas(canvasElement) {
         measureRect = () => this
     }
 
-    class Text extends CanvasItem {
+    class Text extends Control {
         /**
          * @param {CanvasRenderingContext2D} ctx
          * @param {number} x
@@ -153,17 +155,7 @@ function initCanvas(canvasElement) {
         }
     }
 
-    class Control extends CanvasItem {
-        /**
-         * @param {CanvasRenderingContext2D} ctx
-         */
-        constructor(ctx) {
-            super(ctx);
-        }
 
-        /** @type HandleEvent */
-        handleEvent = e => false
-    }
 
     class Box extends Control {
         /**
