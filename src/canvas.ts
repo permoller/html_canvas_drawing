@@ -1,5 +1,5 @@
 
-export function initCanvas(canvasElement: HTMLCanvasElement) {
+function initCanvas(canvasElement: HTMLCanvasElement) {
 
     interface IRect {
         x: number

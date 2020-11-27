@@ -2,7 +2,8 @@
   "scripts": {
     "build": "tsc",
     "build-watch": "tsc --watch",
-    "serve": "serve"
+    "serve": "serve",
+    "open": "start ./index.html"
   },
   "devDependencies": {
     "serve": "^11.3.2",
